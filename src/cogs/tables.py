@@ -53,7 +53,24 @@ class JDRCog(commands.Cog):
     async def creer_table(self, ctx):
         #TODO Coder la création intéractive de table
         pass
-
+    
+    @commands.command()
     async def annuler_table(self, ctx):
         #TODO Coder l'annulation interactive d'une table de l'utilisateur
     
+
+    #*-*-*-*-*-*-*#
+    #*-*-TASKS-*-*#
+    #*-*-*-*-*-*-*#
+
+
+
+async def wait_for_seconds(secs, then, cancel_handler=None):
+    if secs > 0:
+        try:
+            await asyncio.sleep(secs)
+        except asyncio.CancelledError:
+            if not (cancel_handler is None):
+                await cancel_handler()
+            return
+    await then()
