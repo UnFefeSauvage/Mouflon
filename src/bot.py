@@ -43,7 +43,7 @@ bot = commands.Bot(command_prefix=config["prefix"], intents=bot_intents)
 
 @bot.event
 async def on_ready():
-    logger.info("Bot is connected and ready to go!")
+    logger.info("Le bot est connecté et prêt à l'utilisation!")
 
 def launch():
     bot.run(config["token"])
