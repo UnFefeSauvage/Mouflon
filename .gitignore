@@ -1,2 +1,6 @@
 #répertoires
-venv/
+venv/**
+resources/JDR/tables/**
+
+#exceptions
+!**/.keep
