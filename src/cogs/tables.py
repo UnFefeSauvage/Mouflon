@@ -81,3 +81,8 @@ async def wait_for_seconds(secs, then, cancel_handler=None):
 
     if not (then is None):
         await then()
+
+async def callback(func, *args, **kwargs):
+    async def inner():
+        await func(*args, **kwargs)
+    return inner
