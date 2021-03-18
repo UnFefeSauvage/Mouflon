@@ -23,13 +23,13 @@ logger.addHandler(handler)
 
 class JDRCog(commands.Cog):
     """Un ensemble de commandes et évènements permettant de gérer des tables de JDR"""
-    def __init__(self, bot, resource_manager):
+    def __init__(self, bot: discord.Client, resource_manager):
         logger.info("Initialisation du module JDR...")
-        self.bot = bot
+        self.bot: discord.Client = bot
         self.resource_manager = resource_manager
-        self.tables = {}
-        self.tasks = {}
-        self.buffer = {}
+        self.tables: dict = {}
+        self.tasks: dict = {}
+        self.buffer: dict = {}
 
         self.config = json.loads(self.resource_manager.read("resources/JDR/config.json"))
 
@@ -39,9 +39,11 @@ class JDRCog(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         #TODO Générer les tasks d'attente
+        pass
     
     async def close(self):
         #TODO Sauvegarder l'état des tables avant de quitter
+        pass
     
     #TODO Gestion d'erreur
 
@@ -57,6 +59,7 @@ class JDRCog(commands.Cog):
     @commands.command()
     async def annuler_table(self, ctx):
         #TODO Coder l'annulation interactive d'une table de l'utilisateur
+        pass
     
 
     #*-*-*-*-*-*-*#
@@ -70,7 +73,11 @@ async def wait_for_seconds(secs, then, cancel_handler=None):
         try:
             await asyncio.sleep(secs)
         except asyncio.CancelledError:
-            if not (cancel_handler is None):
+            if cancel_handler is None:
+                raise
+            else:
                 await cancel_handler()
-            return
-    await then()
+                return
+
+    if not (then is None):
+        await then()
