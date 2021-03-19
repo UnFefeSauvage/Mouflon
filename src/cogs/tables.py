@@ -287,8 +287,26 @@ class JDRCog(commands.Cog):
             )
         )
 
+    async def announce_table(self, table_data, channel=None):
+        # Si non précisé, le canal est celui par défaut
+        if channel is None:
+            channel: discord.TextChannel = self.guild.get_channel(int(self.config["inscription_channel_id"]))
+        
+        #TODO Set reaction listener and inscription timer/limiter
 
+        await channel.send(embed=self.generate_table_announcement_embed(table_data))
+        
 
+    #*-*-*-*-*-*-*-*-*#
+    #*-*-UTILITIES-*-*#
+    #*-*-*-*-*-*-*-*-*#
+
+    def generate_table_announcement_embed(self, table_data):
+        author: discord.Member = await self.guild.get_member(int(table_data["author_id"]))
+        return discord.Embed(
+            title=table_data["title"],
+            description=table_data["description"]
+        ).set_author(name=author.display_name, icon_url=author.avatar_url)
 
 async def wait_for_seconds(secs, *, then=None, cancel_handler=None):
     if secs > 0:
