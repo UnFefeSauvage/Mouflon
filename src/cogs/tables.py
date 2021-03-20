@@ -121,7 +121,8 @@ class JDRCog(commands.Cog):
         #       creation_time : int, (0)
         #       player_role_id : str, (4)
         #       gm_role_id : str, (5)
-        #       inscription_time : int (3)
+        #       inscription_time : int, (3)
+        #       announced : int (6)
         #   }
         logger.debug(f"edit_table invoked (phase {phase})")
         
@@ -196,7 +197,7 @@ class JDRCog(commands.Cog):
             table_data["player_role_id"] = str(player_role.id)
 
             info_embed = discord.Embed(
-                title="4. Rôle MJ",
+                title="5. Rôle MJ",
                 description="Envoies en message le nom du rôle MJ à créer.\n"
                            +"Il te sera assigné de base et tu pourra le donner à d'autres personnes avec <ajouter commande>.\n"
                            +"*(Il est modifiable à volonté)*"
@@ -205,9 +206,6 @@ class JDRCog(commands.Cog):
             await channel.send(embed=info_embed)
         
         if phase == 5:
-            #TODO Créer le message d'annonce, la surveillance de réacions, la tâche de fermeture d'inscription
-            #TODO Créer la catégorie, les canaux et les permissions
-            
             # Création du rôle de MJ
             permissions_mj = discord.Permissions()
             gm_role: discord.Role = await self.guild.create_role(
@@ -267,6 +265,24 @@ class JDRCog(commands.Cog):
                 reason=f'Créateur de la table "{table_data["title"]}"'
             )
 
+            info_embed = discord.Embed(
+                title="6. Annonce",
+                description="Veux tu annoncer la table tout de suite et l'ouvrir aux inscriptions?\n"
+                           +"O -> oui\n"
+                           +"N'importe quoi d'autre -> non\n"
+                           +f"(Tu pourra l'annoncer quand tu voudra avec =annoncer_table)"
+            )
+
+            await channel.send(embed=info_embed)
+
+        if phase == 6:
+            #TODO Créer la surveillance de réacions, la tâche de fermeture d'inscription
+
+            # Si l'utilisateur a répondu oui, annoncer la table
+            if input_data == "O":
+                await self.announce_table(table_data)
+                table_data["announced"] = int(time.time())
+
             # Enregistrement et nettoyage de la table
             del table_data["channel_id"]
             self.tables[table_data["author_id"]] = table_data
@@ -286,6 +302,7 @@ class JDRCog(commands.Cog):
                 cancel_handler=callback(self.edit_table,table_data,phase+1)
             )
         )
+        
 
     async def announce_table(self, table_data, channel=None):
         # Si non précisé, le canal est celui par défaut
