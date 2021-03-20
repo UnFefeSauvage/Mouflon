@@ -46,4 +46,8 @@ async def on_ready():
     logger.info("Le bot est connecté et prêt à l'utilisation!")
 
 def launch():
+    bot.add_cog(cogs.JDRCog(bot,resource_manager))
     bot.run(config["token"])
+
+if __name__ == "__main__":
+    launch()
