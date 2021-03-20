@@ -112,6 +112,12 @@ class JDRCog(commands.Cog):
     #*-*-TASKS-*-*#
     #*-*-*-*-*-*-*#
 
+    @commands.command()
+    async def test(self, ctx):
+        waiting_task = asyncio.create_task(asyncio.sleep(10),name="Waiting test")
+        result = await asyncio.wait_for(waiting_task,5)
+        await ctx.send(result.__repr__())
+
     async def edit_table(self, table_data, phase=0):
         #   table_data: {
         #       author_id : str, (0)
@@ -324,6 +330,10 @@ class JDRCog(commands.Cog):
             title=table_data["title"],
             description=table_data["description"]+"\n\n:white_check_mark: pour participer"
         ).set_author(name=author.display_name+" propose:", icon_url=author.avatar_url)
+
+    async def wait_for_new_input(self, author_id):
+        author_id = str(author_id)
+        self.buffer[author_id]["input_has_changed"]
 
 async def wait_for_seconds(secs, *, then=None, cancel_handler=None):
     if secs > 0:

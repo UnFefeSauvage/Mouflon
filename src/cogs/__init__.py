@@ -1,1 +1,1 @@
-from .tables import JDRCog
+from .JDR import JDRCog
