@@ -59,11 +59,11 @@ class JDRCog(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self,msg: discord.Message):
         author_id = str(msg.author.id)
-        channel_id = str(msg.channel.id)
+        channel_id = msg.channel.id
 
         if author_id in self.buffer:
             if not self.buffer[author_id]["task"].done():
-                if self.buffer[author_id]["task_input"]["channel_id"] == channel_id:
+                if self.buffer[author_id]["task_input"]["channel"].id == channel_id:
                     # Si ce message était attendu par une fonction interactive,
                     # récupérer l'input et lancer la phase suivante
                     self.buffer[author_id]["task_input"] = msg.content
@@ -134,8 +134,8 @@ class JDRCog(commands.Cog):
         logger.debug(f"edit_table invoked (phase {phase})")
         
         channel: discord.TextChannel = table_data["channel"]
-        author_id: str = table_data["author"].id
-        channel_id: str = table_data["channel"].id
+        author_id: str = str(table_data["author"].id)
+        channel_id: str = str(table_data["channel"].id)
 
         input_data: Any = self.buffer[author_id]["task_input"]
 
@@ -227,7 +227,7 @@ class JDRCog(commands.Cog):
             table_data["gm_role"] = gm_role
 
             # Récupération du rôle de joueur
-            player_role: discord.Role = self.guild.get_role(int(table_data["player_role_id"]))
+            player_role: discord.Role = table_data["player_role"]
 
             # Création des permission de la catégorie
             category_permissions = {
