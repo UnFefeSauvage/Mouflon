@@ -32,7 +32,7 @@ class Table:
         """Returns the author of the table"""
         return self._author
     
-    def set_author(self, author: discord.Member):
+    def set_author(self, author: discord.Member) -> None:
         """Sets the author of the table"""
         if not isinstance(author,discord.Member):
             raise ValueError(f"Expected author to be a Member! (got {type(author)} instead)")
@@ -43,7 +43,7 @@ class Table:
         """Returns the table's title"""
         return self._title
     
-    def set_title(self, title: str):
+    def set_title(self, title: str) -> None:
         """Sets the table's title"""
         if not isinstance(title, str):
             raise ValueError(f"Expected title to be a string! (got {type(title)} instead)")
@@ -54,7 +54,7 @@ class Table:
         """Returns the description of the table"""
         return self._description
     
-    def set_description(self, description: str):
+    def set_description(self, description: str) -> None:
         """Sets the description of the table"""
         if not isinstance(title, str):
             raise ValueError(f"Expected description to be a string! (got {type(description)} instead)")
@@ -65,6 +65,8 @@ class Table:
         """Returns the time of creation of the Table (sec. since epoch)"""
         return self._creation_time
 
+    def is_announced(self) -> bool:
+        return self._annouced
     
     def set(self, **kwargs) -> None:
         """Sets Table values based on the given keyword arguments"""
