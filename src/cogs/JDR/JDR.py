@@ -243,7 +243,8 @@ class JDRCog(commands.Cog):
                 player_role: discord.PermissionOverwrite(
                     read_messages=True,
                     read_message_history=True,
-                    send_messages=True
+                    send_messages=True,
+                    attach_files=True
                 )
             }
             # Création de la catégorie
