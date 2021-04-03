@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 from .Table import Table
+from .ReactionListener import ReactionListener
 
 import discord
 from discord.ext import commands, tasks
@@ -30,6 +31,7 @@ class JDRCog(commands.Cog):
         logger.info("Initialisation du module JDR...")
         self.bot: discord.Client = bot
         self.resource_manager = resource_manager
+        self.reaction_listener: ReactionListener = ReactionListener()
         self.tables: dict = {}
         self.tasks: dict = {}
         self.buffer: dict = {}
@@ -303,7 +305,27 @@ class JDRCog(commands.Cog):
             )
 
             if table.is_announced():
-                await self.announce_table(table)
+                anouncement_msg: discord.Message = await self.announce_table(table)
+            
+            #* Callbacks (async lambdas don't exist :< )
+            async def acb(mid, emoji, member):
+                await member.add_roles(
+                    table_data["player_role"],
+                    reason='A réagi pour être joueur de la table'
+                )
+            
+            async def rmcb(mid, emoji, member):
+                await member.remove_roles(
+                    table_data["player_role"],
+                    reason='A enlevé sa réaction pour être joueur'
+                )
+
+            self.reaction_listener.add_callbacks(
+                anouncement_msg.id,
+                ":white_check_mark:",
+                add_callbacks= [acb],
+                rm_callbacks= [rmcb]
+            )
 
             # Enregistrement de la table
             self.tables[table_data["author"]] = table
@@ -326,14 +348,14 @@ class JDRCog(commands.Cog):
         )
         
 
-    async def announce_table(self, table: Table, channel=None):
+    async def announce_table(self, table: Table, channel=None) -> discord.Message:
         # Si non précisé, le canal est celui par défaut
         if channel is None:
             channel: discord.TextChannel = self.guild.get_channel(int(self.config["inscription_channel_id"]))
         
         #TODO Set reaction listener and inscription timer/limiter
         announcement_embed = self.generate_table_announcement_embed(table)
-        await channel.send(embed=announcement_embed)
+        return await channel.send(embed=announcement_embed)
         
 
     #*-*-*-*-*-*-*-*-*#
