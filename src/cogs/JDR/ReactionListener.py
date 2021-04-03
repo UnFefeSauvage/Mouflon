@@ -66,11 +66,11 @@ class ReactionListener:
             self._add_emoji_listener(msg_id, emoji)
 
         for callback in add_callbacks:
-            if not isinstance(callback, callable):
+            if not callable(callback):
                 raise ValueError("Expected a list of callables!")
 
         for callback in rm_callbacks:
-            if not isinstance(callback, callable):
+            if not callable(callback):
                 raise ValueError("Expected a list of callables!")
         
         for callback in add_callbacks:
@@ -127,4 +127,4 @@ class ReactionListener:
             callbacks = self._messages[msg_id]["reactions"][emoji]["rm_callbacks"]
         
         for callback in callbacks:
-            await callback(msg_id=msg_id, emoji=emoji, member=member)
+            await callback(msg_id, emoji, member)
