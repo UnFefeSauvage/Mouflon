@@ -1,4 +1,6 @@
 # -*- coding: UTF-8 -*-
+from Table import Table
+
 import discord
 from discord.ext import commands, tasks
 
@@ -91,9 +93,8 @@ class JDRCog(commands.Cog):
         #TODO Check le nombre de parties déjà créées
 
         table_data = {
-            "author_id": author_id,
-            "channel_id": channel_id,
-            "creation_time": int(time.time())
+            "author": ctx.author,
+            "channel": ctx.channel
         }
 
         #Création des données de base de la table, récupérées par la tâche d'édition
@@ -120,21 +121,23 @@ class JDRCog(commands.Cog):
 
     async def edit_table(self, table_data, phase=0):
         #   table_data: {
-        #       author_id : str, (0)
-        #       channel_id : str, (0) (only for edition)
+        #       author : discord.Member, (0)
+        #       channel : discord.TextChannel, (0) (only for edition)
         #       title : str, (1)
         #       description : str, (2)
         #       creation_time : int, (0)
-        #       player_role_id : str, (4)
-        #       gm_role_id : str, (5)
+        #       player_role : discord.Role, (4)
+        #       gm_role : discord.Role, (5)
         #       inscription_time : int, (3)
         #       announced : int (6)
         #   }
         logger.debug(f"edit_table invoked (phase {phase})")
         
-        input_data: Any = self.buffer[table_data["author_id"]]["task_input"]
+        channel: discord.TextChannel = table_data["channel"]
+        author_id: str = table_data["author"].id
+        channel_id: str = table_data["channel"].id
 
-        channel: discord.TextChannel = self.bot.get_channel(int(table_data["channel_id"]))
+        input_data: Any = self.buffer[author_id]["task_input"]
 
 
         if phase == 0:
@@ -200,7 +203,7 @@ class JDRCog(commands.Cog):
                 mentionable=True,
                 reason=f'Rôle de joueur pour la table "{table_data["title"]}"'
             )
-            table_data["player_role_id"] = str(player_role.id)
+            table_data["player_role"] = player_role
 
             info_embed = discord.Embed(
                 title="5. Rôle MJ",
@@ -221,7 +224,7 @@ class JDRCog(commands.Cog):
                 mentionable=True,
                 reason=f'Rôle de MJ pour la table "{table_data["title"]}"'
             )
-            table_data["gm_role_id"] = str(gm_role.id)
+            table_data["gm_role"] = gm_role
 
             # Récupération du rôle de joueur
             player_role: discord.Role = self.guild.get_role(int(table_data["player_role_id"]))
@@ -266,7 +269,7 @@ class JDRCog(commands.Cog):
             )
 
             # Assignation du rôle de MJ
-            gm: discord.Member = self.guild.get_member(int(table_data["author_id"]))
+            gm: discord.Member = table_data["author"]
             await gm.add_roles(
                 gm_role,
                 reason=f'Créateur de la table "{table_data["title"]}"'
@@ -287,23 +290,35 @@ class JDRCog(commands.Cog):
 
             # Si l'utilisateur a répondu oui, annoncer la table
             if input_data == "O":
-                await self.announce_table(table_data)
                 table_data["announced"] = int(time.time())
 
-            # Enregistrement et nettoyage de la table
-            del table_data["channel_id"]
-            self.tables[table_data["author_id"]] = table_data
-            del self.buffer[table_data["author_id"]]
+            table = Table(
+                author=table_data["author"],
+                title=table_data["title"],
+                description=table_data["description"],
+                player_role=table_data["player_role"],
+                gm_role=table_data["gm_role"],
+                inscription_time=table_data["inscription_time"],
+                annouced=table_data["announced"]
+            )
+
+            if table.is_announced():
+                await self.announce_table(table)
+
+            # Enregistrement de la table
+            self.tables[table_data["author"]] = table
+            del self.buffer[author_id]
 
             # On a fini la création, pas de phase suivante
             return
 
+        #Si on est pas à la dernière phase:
         
         #On remet dans buffer les données nécéssaires pour guetter le prochain message
-        self.buffer[table_data["author_id"]]["task_input"] = table_data
+        self.buffer[author_id]["task_input"] = table_data
 
-        #Si on est en phase 0->3
-        self.buffer[table_data["author_id"]]["task"] = asyncio.create_task(
+        #On attend le prochain input
+        self.buffer[author_id]["task"] = asyncio.create_task(
             wait_for_seconds(
                 300,
                 cancel_handler=callback(self.edit_table,table_data,phase+1)
@@ -311,13 +326,13 @@ class JDRCog(commands.Cog):
         )
         
 
-    async def announce_table(self, table_data, channel=None):
+    async def announce_table(self, table: Table, channel=None):
         # Si non précisé, le canal est celui par défaut
         if channel is None:
             channel: discord.TextChannel = self.guild.get_channel(int(self.config["inscription_channel_id"]))
         
         #TODO Set reaction listener and inscription timer/limiter
-        announcement_embed = await self.generate_table_announcement_embed(table_data)
+        announcement_embed = self.generate_table_announcement_embed(table)
         await channel.send(embed=announcement_embed)
         
 
@@ -325,16 +340,12 @@ class JDRCog(commands.Cog):
     #*-*-UTILITIES-*-*#
     #*-*-*-*-*-*-*-*-*#
 
-    async def generate_table_announcement_embed(self, table_data):
-        author: discord.Member = self.guild.get_member(int(table_data["author_id"]))
+    def generate_table_announcement_embed(self, table: Table) -> discord.Embed:
+        author: discord.Member = table.get_author()
         return discord.Embed(
-            title=table_data["title"],
-            description=table_data["description"]+"\n\n:white_check_mark: pour participer"
+            title=table.get_title(),
+            description=table.get_description()+"\n\n:white_check_mark: pour participer"
         ).set_author(name=author.display_name+" propose:", icon_url=author.avatar_url)
-
-    async def wait_for_new_input(self, author_id):
-        author_id = str(author_id)
-        self.buffer[author_id]["input_has_changed"]
 
 async def wait_for_seconds(secs, *, then=None, cancel_handler=None):
     if secs > 0:
