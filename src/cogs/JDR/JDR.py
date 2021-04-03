@@ -1,5 +1,5 @@
 # -*- coding: UTF-8 -*-
-from Table import Table
+from .Table import Table
 
 import discord
 from discord.ext import commands, tasks
