@@ -65,6 +65,12 @@ class Table:
         """Returns the time of creation of the Table (sec. since epoch)"""
         return self._creation_time
 
+    def get_player_role(self) -> discord.Role:
+        return self._player_role
+    
+    def get_gm_role(self) -> discord.Role:
+        return self._gm_role
+
     def is_announced(self) -> bool:
         return self._annouced
     
