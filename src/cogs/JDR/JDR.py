@@ -308,25 +308,6 @@ class JDRCog(commands.Cog):
                 anouncement_msg: discord.Message = await self.announce_table(table)
             
             #TODO Déplacer cette partie du code dans self.announce_table
-            #* Callbacks (async lambdas don't exist :< )
-            async def acb(mid, emoji, member):
-                await member.add_roles(
-                    table_data["player_role"],
-                    reason='A réagi pour être joueur de la table'
-                )
-            
-            async def rmcb(mid, emoji, member):
-                await member.remove_roles(
-                    table_data["player_role"],
-                    reason='A enlevé sa réaction pour être joueur'
-                )
-
-            self.reaction_listener.add_callbacks(
-                anouncement_msg.id,
-                ":white_check_mark:",
-                add_callbacks= [acb],
-                rm_callbacks= [rmcb]
-            )
 
             # Enregistrement de la table
             self.tables[table_data["author"]] = table
@@ -356,7 +337,27 @@ class JDRCog(commands.Cog):
         
         #TODO Set reaction listener and inscription timer/limiter
         announcement_embed = self.generate_table_announcement_embed(table)
-        return await channel.send(embed=announcement_embed)
+        message = await channel.send(embed=announcement_embed)
+
+        #* Callbacks (async lambdas don't exist :< )
+        async def acb(mid, emoji, member):
+            await member.add_roles(
+                table.get_player_role(),
+                reason='A réagi pour être joueur de la table'
+            )
+        
+        async def rmcb(mid, emoji, member):
+            await member.remove_roles(
+                table.get_player_role(),
+                reason='A enlevé sa réaction pour être joueur'
+            )
+        
+        self.reaction_listener.add_callbacks(
+            anouncement_msg.id,
+            ":white_check_mark:",
+            add_callbacks= [acb],
+            rm_callbacks= [rmcb]
+        )
         
 
     #*-*-*-*-*-*-*-*-*#
