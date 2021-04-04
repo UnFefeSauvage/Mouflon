@@ -307,6 +307,7 @@ class JDRCog(commands.Cog):
             if table.is_announced():
                 anouncement_msg: discord.Message = await self.announce_table(table)
             
+            #TODO Déplacer cette partie du code dans self.announce_table
             #* Callbacks (async lambdas don't exist :< )
             async def acb(mid, emoji, member):
                 await member.add_roles(
