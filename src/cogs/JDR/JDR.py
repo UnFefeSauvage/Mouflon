@@ -337,7 +337,7 @@ class JDRCog(commands.Cog):
         
         #TODO Set reaction listener and inscription timer/limiter
         announcement_embed = self.generate_table_announcement_embed(table)
-        message = await channel.send(embed=announcement_embed)
+        message: discord.Message = await channel.send(embed=announcement_embed)
 
         #* Callbacks (async lambdas don't exist :< )
         async def acb(mid, emoji, member):
@@ -353,11 +353,13 @@ class JDRCog(commands.Cog):
             )
         
         self.reaction_listener.add_callbacks(
-            anouncement_msg.id,
+            message.id,
             ":white_check_mark:",
             add_callbacks= [acb],
             rm_callbacks= [rmcb]
         )
+
+        return message
         
 
     #*-*-*-*-*-*-*-*-*#
