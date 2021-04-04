@@ -36,7 +36,8 @@ bot_intents = discord.Intents(
     messages=True,
     members=True,
     guilds=True,
-    dm_messages=True
+    dm_messages=True,
+    reactions=True
 )
 
 bot = commands.Bot(command_prefix=config["prefix"], intents=bot_intents)

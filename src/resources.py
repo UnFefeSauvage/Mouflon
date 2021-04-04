@@ -1,4 +1,5 @@
 # -*- coding: UTF-8 -*-
+import os
 import os.path
 import threading
 
@@ -8,14 +9,19 @@ class ResourcesManager:
         self.path = os.path.normpath(path)
         self.locks = {}
     
-    def write(self, path, data):
+    def write(self, path, data, mkdir=False):
         if os.path.isdir(path):
             raise ValueError(f"Cannot write to {path} for it is a directory!")
-        
+
         path = self.path + "/" + os.path.normpath(path)
 
         if ".." in path or path[0] == "/":
             raise ValueError("Only relative paths to childs are allowed!")
+
+        if mkdir:
+            subdirs = os.path.normpath(path).split('/')
+            del subdirs[-1]
+            os.makedirs('/'.join(subdirs), exist_ok=True)
 
         if not (path in self.locks.keys()):
             self.locks[path] = threading.Lock()

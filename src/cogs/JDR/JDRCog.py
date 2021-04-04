@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 from .Table import Table
+from .ReactionListener import ReactionListener
 
 import discord
 from discord.ext import commands, tasks
@@ -30,13 +31,22 @@ class JDRCog(commands.Cog):
         logger.info("Initialisation du module JDR...")
         self.bot: discord.Client = bot
         self.resource_manager = resource_manager
+        self.reaction_listener: ReactionListener = ReactionListener()
         self.tables: dict = {}
         self.tasks: dict = {}
         self.buffer: dict = {}
+        self.guild: discord.Guild = None
 
         self.config = json.loads(self.resource_manager.read("JDR/config.json"))
 
-        #files_to_load = os.listdir("JDR/tables")
+        GMs = os.listdir("resources/JDR/tables")
+        print(f"GMs: {GMs}")
+
+        for GM_ID in GMs:
+            self.tables[GM_ID] = {}
+            GM_tables = os.listdir(f"resources/JDR/tables/{GM_ID}")
+
+
 
     #*-*-*-*-*-*-*-*-*-*#
     #*-*-*LISTENERS*-*-*#
@@ -49,7 +59,7 @@ class JDRCog(commands.Cog):
 
         #Récupération du channel d'inscription
         self.inscription_channel: discord.TextChannel = self.guild.get_channel(int(self.config["inscription_channel_id"]))
-        #TODO Générer les tasks d'attente
+        #TODO Générer les tasks d'attente (si on en a)
     
     async def close(self):
         #TODO Sauvegarder l'état des tables avant de quitter
@@ -68,6 +78,26 @@ class JDRCog(commands.Cog):
                     # récupérer l'input et lancer la phase suivante
                     self.buffer[author_id]["task_input"] = msg.content
                     self.buffer[author_id]["task"].cancel()
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
+        await self.reaction_listener.process(
+            chan_id=payload.channel_id,
+            msg_id=payload.message_id,
+            emoji=str(payload.emoji),
+            member=self.guild.get_member(payload.user_id),
+            add=True
+        )
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent):
+        await self.reaction_listener.process(
+            chan_id=payload.channel_id,
+            msg_id=payload.message_id,
+            emoji=str(payload.emoji),
+            member=self.guild.get_member(payload.user_id),
+            add=False
+        )
 
     #*-*-*-*-*-*-*-*-*#
     #*-*-COMMANDS--*-*#
@@ -112,12 +142,6 @@ class JDRCog(commands.Cog):
     #*-*-*-*-*-*-*#
     #*-*-TASKS-*-*#
     #*-*-*-*-*-*-*#
-
-    @commands.command()
-    async def test(self, ctx):
-        waiting_task = asyncio.create_task(asyncio.sleep(10),name="Waiting test")
-        result = await asyncio.wait_for(waiting_task,5)
-        await ctx.send(result.__repr__())
 
     async def edit_table(self, table_data, phase=0):
         #   table_data: {
@@ -286,8 +310,6 @@ class JDRCog(commands.Cog):
             await channel.send(embed=info_embed)
 
         if phase == 6:
-            #TODO Créer la surveillance de réacions, la tâche de fermeture d'inscription
-
             # Si l'utilisateur a répondu oui, annoncer la table
             if input_data == "O":
                 table_data["announced"] = int(time.time())
@@ -299,14 +321,14 @@ class JDRCog(commands.Cog):
                 player_role=table_data["player_role"],
                 gm_role=table_data["gm_role"],
                 inscription_time=table_data["inscription_time"],
-                annouced=table_data["announced"]
+                announced=table_data["announced"]
             )
 
             if table.is_announced():
                 await self.announce_table(table)
-
+            
             # Enregistrement de la table
-            self.tables[table_data["author"]] = table
+            self._add_table(author_id, table)
             del self.buffer[author_id]
 
             # On a fini la création, pas de phase suivante
@@ -326,26 +348,75 @@ class JDRCog(commands.Cog):
         )
         
 
-    async def announce_table(self, table: Table, channel=None):
+    async def announce_table(self, table: Table, channel=None) -> discord.Message:
         # Si non précisé, le canal est celui par défaut
         if channel is None:
             channel: discord.TextChannel = self.guild.get_channel(int(self.config["inscription_channel_id"]))
         
-        #TODO Set reaction listener and inscription timer/limiter
+        #TODO Set inscription timer/limiter
         announcement_embed = self.generate_table_announcement_embed(table)
-        await channel.send(embed=announcement_embed)
+        message: discord.Message = await channel.send(embed=announcement_embed)
+
+        table.set_announcement_message(message)
+
+        #* Callbacks (async lambdas don't exist :< )
+        async def acb(mid, emoji, member):
+            await member.add_roles(
+                table.get_player_role(),
+                reason='A réagi pour être joueur de la table'
+            )
+        
+        async def rmcb(mid, emoji, member):
+            await member.remove_roles(
+                table.get_player_role(),
+                reason='A enlevé sa réaction pour être joueur'
+            )
+        
+        self.reaction_listener.add_callbacks(
+            message.channel.id,
+            message.id,
+            "✅",
+            add_callbacks= [acb],
+            rm_callbacks= [rmcb]
+        )
+
+        self.write_table_to_file(table)
+        return message
         
 
     #*-*-*-*-*-*-*-*-*#
     #*-*-UTILITIES-*-*#
     #*-*-*-*-*-*-*-*-*#
 
+    def _add_table(self, author_id: str, table: Table) -> None:
+        # Conversion of int for convenience
+        if isinstance(author_id, int):
+            author_id = str(author_id)
+        
+        if not isinstance(author_id, str):
+            raise TypeError(f"Expected a user id! (got {type(author_id)} instead)")
+        
+        if not author_id in self.tables:
+            self.tables[author_id] = {}
+        
+        self.tables[author_id][str(table.get_creation_time())] = table
+        
+
+
     def generate_table_announcement_embed(self, table: Table) -> discord.Embed:
         author: discord.Member = table.get_author()
         return discord.Embed(
             title=table.get_title(),
-            description=table.get_description()+"\n\n:white_check_mark: pour participer"
+            description=table.get_description()+"\n\n✅ pour participer"
         ).set_author(name=author.display_name+" propose:", icon_url=author.avatar_url)
+
+    def write_table_to_file(self, table: Table) -> None:
+        table_data = table.to_dict()
+        self.resource_manager.write(
+            f"JDR/tables/{table_data['author_id']}/{table_data['creation_time']}.json",
+            json.dumps(table_data),
+            True
+        )
 
 async def wait_for_seconds(secs, *, then=None, cancel_handler=None):
     if secs > 0:
