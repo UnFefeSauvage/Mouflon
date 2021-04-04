@@ -12,7 +12,7 @@ class Table:
         player_role: discord.Role = None,
         gm_role: discord.Role = None,
         inscription_time: int = None,
-        annouced: int = None
+        announced: int = None
         ):
         self._author: discord.Member = author
         self._title: str = title
@@ -26,7 +26,7 @@ class Table:
         self._player_role: discord.Role = player_role
         self._gm_role: discord.Role = gm_role
         self._inscription_time: int = inscription_time
-        self._annouced: int = annouced
+        self._announced: int = announced
     
     def get_author(self) -> discord.Member:
         """Returns the author of the table"""
@@ -74,7 +74,7 @@ class Table:
         return self._gm_role
 
     def is_announced(self) -> bool:
-        return self._annouced
+        return self._announced
     
     def set(self, **kwargs) -> None:
         """Sets Table values based on the given keyword arguments"""
@@ -87,3 +87,16 @@ class Table:
                 self.set_description(value)
             else:
                 raise KeyError(f"The attribute ${key} does not exist or cannot be set")
+
+    def to_dict(self) -> dict:
+        """Returns the dict equivalent of the table"""
+        data = {}
+        data["author_id"] = self._author.id
+        data["title"] = self._title
+        data["description"] = self._description
+        data["creation_time"] = self._creation_time
+        data["player_role_id"] = self._player_role.id
+        data["gm_role_id"] = self._gm_role.id
+        data["inscription_time"] = self._inscription_time
+        data["announced"] = self._announced
+        return data
