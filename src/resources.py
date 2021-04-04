@@ -21,7 +21,6 @@ class ResourcesManager:
         if mkdir:
             subdirs = os.path.normpath(path).split('/')
             del subdirs[-1]
-            print(f"path: {path}\nsubdirs: {subdirs}")
             os.makedirs('/'.join(subdirs), exist_ok=True)
 
         if not (path in self.locks.keys()):
