@@ -28,7 +28,7 @@ logger.addHandler(handler)
 class JDRCog(commands.Cog):
     """Un ensemble de commandes et évènements permettant de gérer des tables de JDR"""
     def __init__(self, bot: discord.Client, resource_manager):
-        logger.info("Initialisation du module JDR...")
+        logger.info("Initialisation du module JDR... (pre-connexion)")
         self.bot: discord.Client = bot
         self.resource_manager = resource_manager
         self.reaction_listener: ReactionListener = ReactionListener()
@@ -39,12 +39,6 @@ class JDRCog(commands.Cog):
 
         self.config = json.loads(self.resource_manager.read("JDR/config.json"))
 
-        GMs = os.listdir("resources/JDR/tables")
-        print(f"GMs: {GMs}")
-
-        for GM_ID in GMs:
-            self.tables[GM_ID] = {}
-            GM_tables = os.listdir(f"resources/JDR/tables/{GM_ID}")
 
 
 
@@ -54,16 +48,45 @@ class JDRCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
+        logger.info("Initialisation du module JDR... (post-connexion)")
+        logger.info("Récupération de la guilde associée...")
         #Récupération de la guilde
         self.guild: discord.Guild = self.bot.get_guild(int(self.config["guild_id"]))
 
+        logger.info("Récupération du canal d'annonce")
         #Récupération du channel d'inscription
         self.inscription_channel: discord.TextChannel = self.guild.get_channel(int(self.config["inscription_channel_id"]))
+
+        logger.info("Récupération des Tables...")
+        logger.debug("Récupération des IDs des MJs...")
+        GMs = os.listdir("resources/JDR/tables")
+        logger.debug(f"MJs: {GMs}")
+
+        #Chargement des tables existantes
+        for GM_ID in GMs:
+            self.tables[GM_ID] = {}
+            logger.debug(f"Récupération des tables du MJ {GM_ID}...")
+            GM_tables = os.listdir(f"resources/JDR/tables/{GM_ID}")
+            for table_file in GM_tables:
+                table_data = json.loads(self.resource_manager.read(f"JDR/tables/{GM_ID}/{table_file}"))
+                table: Table = await self.table_from_dict(table_data)
+                logger.debug(f"Table '{table.get_title()}' (id: {table_file[:-5]}) du MJ '{table.get_author()}' (id: {GM_ID}) récupérée!")
+                if table.is_announced():
+                    #TODO Traiter les réactions ajoutées ou retirées pendant la déconnexion
+                    logger.debug("La table a un message d'annonce, mise en place des listeners...")
+                    self.set_table_announcement_listeners(table)
+                self.tables[GM_ID][str(table._creation_time)] = table
+
+        logger.info("Initialisation du module JDR terminée!")
         #TODO Générer les tasks d'attente (si on en a)
     
     async def close(self):
         #TODO Sauvegarder l'état des tables avant de quitter
-        pass
+        logger.info("Sauvegarde des tables avant arrêt...")
+        for GM in self.tables:
+            for table in self.tables[GM]:
+                self.write_table_to_file(table)
+        logger.info("Sauvegarde terminée!")
     
     #TODO Gestion d'erreur
     @commands.Cog.listener()
@@ -131,7 +154,7 @@ class JDRCog(commands.Cog):
         self.buffer[author_id]["task_input"] = table_data
         self.buffer[author_id]["task"] = asyncio.Task(asyncio.sleep(0), name="placeholder")
 
-        await self.edit_table(table_data)
+        await self.create_table(table_data)
     
     @commands.command()
     async def annuler_table(self, ctx):
@@ -143,7 +166,7 @@ class JDRCog(commands.Cog):
     #*-*-TASKS-*-*#
     #*-*-*-*-*-*-*#
 
-    async def edit_table(self, table_data, phase=0):
+    async def create_table(self, table_data, phase=0):
         #   table_data: {
         #       author : discord.Member, (0)
         #       channel : discord.TextChannel, (0) (only for edition)
@@ -155,7 +178,16 @@ class JDRCog(commands.Cog):
         #       inscription_time : int, (3)
         #       announced : int (6)
         #   }
-        logger.debug(f"edit_table invoked (phase {phase})")
+        steps = [
+            "Premier prompt",
+            "Titre",
+            "Description",
+            "Délai d'inscription",
+            "Rôle de joueur",
+            "Rôle de MJ",
+            "Annonce et enregistrement"
+        ]
+        logger.debug(f"create_table invoqué (phase {phase}: {steps[phase]})")
         
         channel: discord.TextChannel = table_data["channel"]
         author_id: str = str(table_data["author"].id)
@@ -163,7 +195,7 @@ class JDRCog(commands.Cog):
 
         input_data: Any = self.buffer[author_id]["task_input"]
 
-
+        #* Premier prompt
         if phase == 0:
 
             info_embed = discord.Embed(
@@ -173,6 +205,7 @@ class JDRCog(commands.Cog):
 
             await channel.send(embed=info_embed)
 
+        #* Titre
         if phase == 1:
             table_data["title"] = input_data
 
@@ -183,9 +216,13 @@ class JDRCog(commands.Cog):
 
             await channel.send(embed=info_embed)
 
+        #* Description
         if phase == 2:
             table_data["description"] = input_data
-
+            #FIXME Solution temporaire pour passer l'étape "délai d'inscription"
+            phase += 1
+            #TODO Prendre en charge les délais d'inscription ou s'en débarasser complètement
+            """
             info_embed = discord.Embed(
                 title="3. Délai d'inscription",
                 description="Pendant combien de temps pourra-t-on s'inscrire?\n"
@@ -195,9 +232,13 @@ class JDRCog(commands.Cog):
             )
             
             await channel.send(embed=info_embed)
+            """
 
+        #* Délai d'inscription (désactivé)
         if phase == 3:
-
+            #FIXME Solution temporaire pour passer l'étape "délai d'inscription"
+            table_data["inscription_time"] = 0
+            """
             total_time: int = 0
             parts: list = re.findall(r'[0-9]+[jhms]', input_data)
             scale = {'s': 1, 'm': 60, 'h': 3600, 'j': 86400}
@@ -207,9 +248,9 @@ class JDRCog(commands.Cog):
                 total_time += value * scale[unit]
             
             table_data["inscription_time"] = total_time
-
+            """
             info_embed = discord.Embed(
-                title="4. Rôle joueur",
+                title="3. Rôle joueur",
                 description="Envoies en message le nom du rôle joueur à créer.\n"
                            +"Il sera donné à tous ceux qui réagiront au message d'inscription.\n"
                            +"*(Il est modifiable à volonté)*"
@@ -217,6 +258,7 @@ class JDRCog(commands.Cog):
 
             await channel.send(embed=info_embed)
         
+        #* Rôle de joueur
         if phase == 4:
             #Création du rôle de joueur
             permissions_joueur = discord.Permissions()
@@ -230,7 +272,7 @@ class JDRCog(commands.Cog):
             table_data["player_role"] = player_role
 
             info_embed = discord.Embed(
-                title="5. Rôle MJ",
+                title="4. Rôle MJ",
                 description="Envoies en message le nom du rôle MJ à créer.\n"
                            +"Il te sera assigné de base et tu pourra le donner à d'autres personnes avec <ajouter commande>.\n"
                            +"*(Il est modifiable à volonté)*"
@@ -238,6 +280,7 @@ class JDRCog(commands.Cog):
 
             await channel.send(embed=info_embed)
         
+        #* Rôle de MJ
         if phase == 5:
             # Création du rôle de MJ
             permissions_mj = discord.Permissions()
@@ -300,7 +343,7 @@ class JDRCog(commands.Cog):
             )
 
             info_embed = discord.Embed(
-                title="6. Annonce",
+                title="5. Annonce",
                 description="Veux tu annoncer la table tout de suite et l'ouvrir aux inscriptions?\n"
                            +"O -> oui\n"
                            +"N'importe quoi d'autre -> non\n"
@@ -309,6 +352,7 @@ class JDRCog(commands.Cog):
 
             await channel.send(embed=info_embed)
 
+        #* Annonce et enregistrement
         if phase == 6:
             # Si l'utilisateur a répondu oui, annoncer la table
             if input_data == "O":
@@ -343,7 +387,7 @@ class JDRCog(commands.Cog):
         self.buffer[author_id]["task"] = asyncio.create_task(
             wait_for_seconds(
                 300,
-                cancel_handler=callback(self.edit_table,table_data,phase+1)
+                cancel_handler=callback(self.create_table,table_data,phase+1)
             )
         )
         
@@ -353,32 +397,14 @@ class JDRCog(commands.Cog):
         if channel is None:
             channel: discord.TextChannel = self.guild.get_channel(int(self.config["inscription_channel_id"]))
         
-        #TODO Set inscription timer/limiter
         announcement_embed = self.generate_table_announcement_embed(table)
         message: discord.Message = await channel.send(embed=announcement_embed)
 
         table.set_announcement_message(message)
 
-        #* Callbacks (async lambdas don't exist :< )
-        async def acb(mid, emoji, member):
-            await member.add_roles(
-                table.get_player_role(),
-                reason='A réagi pour être joueur de la table'
-            )
-        
-        async def rmcb(mid, emoji, member):
-            await member.remove_roles(
-                table.get_player_role(),
-                reason='A enlevé sa réaction pour être joueur'
-            )
-        
-        self.reaction_listener.add_callbacks(
-            message.channel.id,
-            message.id,
-            "✅",
-            add_callbacks= [acb],
-            rm_callbacks= [rmcb]
-        )
+        await message.add_reaction("✅")
+
+        self.set_table_announcement_listeners(table)
 
         self.write_table_to_file(table)
         return message
@@ -416,6 +442,59 @@ class JDRCog(commands.Cog):
             f"JDR/tables/{table_data['author_id']}/{table_data['creation_time']}.json",
             json.dumps(table_data),
             True
+        )
+    
+    async def table_from_dict(self, data: dict):
+        if data["announced"]:
+            try:
+                channel: discord.TextChannel = self.guild.get_channel(data["announcement_channel_id"])
+                message = await channel.fetch_message(data["announcement_message_id"])
+            except discord.NotFound:
+                logger.info(f"The announcement message for the table '{data['title']}' cannot be found! Making the table unannounced...")
+                data["announced"] = None
+                message = None
+        else:
+            message = None
+        
+        return Table(
+            author             = self.guild.get_member(data["author_id"]),
+            title              = data["title"],
+            description        = data["description"],
+            player_role        = self.guild.get_role(data["player_role_id"]),
+            gm_role            = self.guild.get_role(data["gm_role_id"]),
+            inscription_time   = data["inscription_time"],
+            creation_time      = data["creation_time"],
+            announced          = data["announced"],
+            announcement_msg   = message
+        )
+    
+    def set_table_announcement_listeners(self, table: Table):
+        message: discord.Message = table.get_annoucement_message()
+        #* Callbacks (async lambdas don't exist :< )
+        async def acb(mid, emoji, member):
+            if member.bot:
+                return
+            
+            await member.add_roles(
+                table.get_player_role(),
+                reason='A réagi pour être joueur de la table'
+            )
+        
+        async def rmcb(mid, emoji, member):
+            if member.bot:
+                return
+            
+            await member.remove_roles(
+                table.get_player_role(),
+                reason='A enlevé sa réaction pour être joueur'
+            )
+        
+        self.reaction_listener.add_callbacks(
+            message.channel.id,
+            message.id,
+            "✅",
+            add_callbacks= [acb],
+            rm_callbacks= [rmcb]
         )
 
 async def wait_for_seconds(secs, *, then=None, cancel_handler=None):
