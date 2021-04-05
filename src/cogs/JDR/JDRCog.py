@@ -80,8 +80,8 @@ class JDRCog(commands.Cog):
         logger.info("Initialisation du module JDR terminée!")
         #TODO Générer les tasks d'attente (si on en a)
     
+    #FIXME Exécutêr cette méthode lors de l'arrêt du bot
     async def close(self):
-        #TODO Sauvegarder l'état des tables avant de quitter
         logger.info("Sauvegarde des tables avant arrêt...")
         for GM in self.tables:
             for table in self.tables[GM]:
@@ -89,6 +89,7 @@ class JDRCog(commands.Cog):
         logger.info("Sauvegarde terminée!")
     
     #TODO Gestion d'erreur
+
     @commands.Cog.listener()
     async def on_message(self,msg: discord.Message):
         author_id = str(msg.author.id)
