@@ -1,9 +1,9 @@
 import discord
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ReactListener")
 handler = logging.StreamHandler()
-handler.setLevel(logging.DEBUG)
+handler.setLevel(logging.WARNING)
 logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(name)-12.12s] [%(levelname)-5.5s]  %(message)s")
 handler.setFormatter(logFormatter)
 logger.addHandler(handler)
@@ -134,7 +134,7 @@ class ReactionListener:
             if not chan_id in self._messages:
                 raise KeyError(f"Channel '{chan_id}' is not listened to!")
 
-            if msg_id in self._messages:
+            if msg_id in self._messages[chan_id]:
                 del self._messages[chan_id][msg_id]
             else:
                 raise KeyError(f"Message '{msg_id}' in channel '{chan_id}' is not listened to!")

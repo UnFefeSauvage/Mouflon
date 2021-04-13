@@ -18,9 +18,9 @@ import operator
 #* * # MISE EN PLACE DU LOGGING  # * *#
 #* * # * # * # * # * # * # * # * # * *#
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("JDRCog")
 handler = logging.StreamHandler()
-handler.setLevel(logging.DEBUG)
+handler.setLevel(logging.INFO)
 logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(name)-12.12s] [%(levelname)-5.5s]  %(message)s")
 handler.setFormatter(logFormatter)
 logger.addHandler(handler)
@@ -53,7 +53,7 @@ class JDRCog(commands.Cog):
         #Récupération de la guilde
         self.guild: discord.Guild = self.bot.get_guild(int(self.config["guild_id"]))
 
-        logger.info("Récupération du canal d'annonce")
+        logger.info("Récupération du canal d'annonce...")
         #Récupération du channel d'inscription
         self.inscription_channel: discord.TextChannel = self.guild.get_channel(int(self.config["inscription_channel_id"]))
 
@@ -61,6 +61,8 @@ class JDRCog(commands.Cog):
         logger.debug("Récupération des IDs des MJs...")
         GMs = os.listdir("resources/JDR/tables")
         logger.debug(f"MJs: {GMs}")
+        mj_count = len(GMs)
+        table_count = 0
 
         #Chargement des tables existantes
         for GM_ID in GMs:
@@ -76,7 +78,9 @@ class JDRCog(commands.Cog):
                     logger.debug("La table a un message d'annonce, mise en place des listeners...")
                     self.set_table_announcement_listeners(table)
                 self.tables[GM_ID][str(table._creation_time)] = table
+                table_count += 1
 
+        logger.info(f"{table_count} tables de {mj_count} MJs chargées!")
         logger.info("Initialisation du module JDR terminée!")
         #TODO Générer les tasks d'attente (si on en a)
     
@@ -84,7 +88,7 @@ class JDRCog(commands.Cog):
     async def close(self):
         logger.info("Sauvegarde des tables avant arrêt...")
         for GM in self.tables:
-            for table in self.tables[GM]:
+            for key, table in self.tables[GM].items():
                 self.write_table_to_file(table)
         logger.info("Sauvegarde terminée!")
     
@@ -129,7 +133,7 @@ class JDRCog(commands.Cog):
 
     @commands.command()
     async def creer_table(self, ctx: commands.Context):
-        """Permet de créer de façon interactive tout ce qui est nécéssaire à une table de JDR"""
+        """Création interactive d'une table"""
         #Récupération de données pratiques        
         author_id = str(ctx.author.id)
         channel_id = str(ctx.channel.id)
@@ -156,11 +160,63 @@ class JDRCog(commands.Cog):
         self.buffer[author_id]["task"] = asyncio.Task(asyncio.sleep(0), name="placeholder")
 
         await self.create_table(table_data)
-    
+
     @commands.command()
-    async def annuler_table(self, ctx):
+    async def annuler_table(self, ctx: commands.Context):
+        """Options d'annulation, d'archivage et de suppression"""
         #TODO Coder l'annulation interactive d'une table de l'utilisateur
-        pass
+        #Récupération de données pratiques        
+        author_id = str(ctx.author.id)
+        channel_id = str(ctx.channel.id)
+
+        #Création de l'espace de buffer pour l'édition de la table
+        if not (author_id in self.buffer):
+            self.buffer[author_id] = {}
+        
+        #Si une tâche d'édition est déjà en cours, ne pas continuer
+        if "task" in self.buffer[author_id]:
+            if not self.buffer[author_id]["task"].done():
+                await ctx.send("Tu es déjà en train d'éditer une partie!")
+                return
+
+        input_data = {
+            "author": ctx.author,
+            "channel": ctx.channel
+        }
+
+        #Création des données du "pipe", récupérées par la tâche d'édition
+        self.buffer[author_id]["task_input"] = input_data
+        self.buffer[author_id]["task"] = asyncio.Task(asyncio.sleep(0), name="placeholder")
+
+        await self.cancel_table(input_data)
+
+    @commands.command()
+    async def editer_table(self, ctx: commands.Context):
+        """Modifier les caractéristiques d'une table"""
+        #Récupération de données pratiques        
+        author_id = str(ctx.author.id)
+        channel_id = str(ctx.channel.id)
+
+        #Création de l'espace de buffer pour l'édition de la table
+        if not (author_id in self.buffer):
+            self.buffer[author_id] = {}
+        
+        #Si une tâche d'édition est déjà en cours, ne pas continuer
+        if "task" in self.buffer[author_id]:
+            if not self.buffer[author_id]["task"].done():
+                await ctx.send("Tu es déjà en train d'éditer une partie!")
+                return
+
+        input_data = {
+            "author": ctx.author,
+            "channel": ctx.channel
+        }
+
+        #Création des données du "pipe", récupérées par la tâche d'édition
+        self.buffer[author_id]["task_input"] = input_data
+        self.buffer[author_id]["task"] = asyncio.Task(asyncio.sleep(0), name="placeholder")
+
+        await self.edit_table(input_data)
     
 
     #*-*-*-*-*-*-*#
@@ -392,6 +448,263 @@ class JDRCog(commands.Cog):
             )
         )
         
+    async def cancel_table(self, input_data, phase=0):
+        # input_data {
+        #     "channel": discord.TextChannel, (0)
+        #     "author": discord.Member (0)
+        #     "table": Talble (2)
+        # }
+        #
+        #
+        channel: discord.TextChannel = input_data["channel"]
+        author: discord.Member = input_data["author"]
+        author_id: str = str(author.id)
+        channel_id: str = str(channel.id)
+
+        new_data: Any = self.buffer[author_id]["task_input"]
+
+        if phase == 0:
+            await channel.send(embed=self.generate_table_list_embed(author))
+            # Si l'auteur n'a aucune table, s'arrêter là
+            if len(self.tables[author_id]) == 0:
+                return
+        
+        if phase == 1:
+            try:
+                table_index = int(new_data)
+            except TypeError:
+                await channel.send("Il me faut un nombre! Donnes m'en un.")
+                phase -= 1 #On recommence la phase 1
+            else:
+                if not table_index in range(0,len(self.tables[author_id])+1):
+                    await channel.send("Ce n'est pas un index valide! Donnes m'en un.")
+                    phase -= 1 #On recommence la phase 1
+                else:
+                    # On récupère la table demandée
+                    i = 1
+                    table = None
+                    for k, t in self.tables[author_id].items():
+                        if i == table_index:
+                            table = t
+                            break
+                    # On la stocke pour pouvoir l'utiliser lors des phases suivantes
+                    input_data["table"] = table
+                    
+                    info_embed = discord.Embed(
+                        title="Annuler ou supprimer?",
+                        description="**1•** Supprimer l'annonce\n**2•** Archiver la partie\n**3•** Supprimer la partie\n**0• Annuler l'opération**"
+                    ).set_author(name=f"Annuler {table.get_title()}?")
+
+                    await channel.send(embed=info_embed)
+
+        if phase == 2:
+            try:
+                command = int(new_data)
+            except ValueError:
+                await channel.send("Il me faut un nombre!")
+                phase -= 1 #On recommence la phase 2
+            else:
+                table: Table = input_data["table"]
+                if not command in range(0,4):
+                    await channel.send("Ce n'est pas une commande valide! Donnes m'en une.")
+                    phase -= 1 #On recommence la phase 1
+                else:
+                    if command == 0: # Annuler
+                        await channel.send("Opération annulée!")
+                    
+                    if command == 1 or command == 3: # Supprimer le message d'annonce
+                        if not table.is_announced() and command == 1:
+                            await channel.send("Impossible de supprimer le message d'annonce: la table n'a pas été annoncée!")
+
+                        message = table.get_annoucement_message()
+                        if not message:
+                            await channel.send("Le message d'annonce a déjà été supprimé.")
+                        else:
+                            try:
+                                await message.delete()
+                            except discord.Forbidden:
+                                logger.warning(f"Impossible de supprimer l'annonce de '{table.get_title()}'!")
+                                await channel.send("ERREUR: Je n'ai pas les droits pour supprimer l'annonce! Demandez à un administateur du serveur pour régler ce problème de droits.")
+                            except discord.NotFound:
+                                self.tables[author_id][str(table.get_creation_time())].set(announced=False)
+                                logger.warning(f"Le message d'annonce de '{table.get_title()}' n'a pas été trouvé... A-t-il été supprimé?")
+                                await channel.send(f"Le message d'annonce de '{table.get_title()}' n'a pas été trouvé... A-t-il été supprimé?")
+                            else:
+                                #FIXME Utiliser le channel_id de la table (à implémenter)
+                                try:
+                                    self.reaction_listener.clear_callbacks(self.inscription_channel.id, table.get_annoucement_message().id)
+                                except KeyError:
+                                    logger.warning(f"La suppression des listeners a échoué pour la partie '{table.get_title()}' (id: {table.get_creation_time()})")
+                                await channel.send("Le message d'annonce à été supprimé!\nLa table n'est plus ouverte aux incriptions.")
+                        
+                        # La table n'est plus annoncée
+                        self.tables[author_id][str(table.get_creation_time())].set(announced=False)
+                        # On sauvegarde la table
+                        self.write_table_to_file(self.tables[author_id][str(table.get_creation_time())])
+
+                    if command == 2: # Archiver la partie
+                        #TODO Implémenter l'archivage
+                        #TODO Supprimer le rôle de Joueur
+                        await channel.send("Lol non j'ai pas encore implémenté ça!")
+                    
+                    if command == 3: # Supprimer la partie
+                        #TODO Supprimer les canaux et la catégorie
+                        #TODO Supprimer les rôles
+                        try: # Suppression du fichier
+                            self.resource_manager.delete(f"JDR/tables/{author_id}/{table.get_creation_time()}.json")
+                        except:
+                            logger.error(f"Impossible de supprimer le fichier 'JDR/tables/{author_id}/{table.get_creation_time()}.json'!")
+                            await channel.send("Une erreur est survenue pendant la suppression :(  (Ce qui ne veut as forcément dire qu'elle n'a pas marché...)\nContactez le développeur")
+                            raise
+                        else: # Suppression de la structure
+                            del self.tables[author_id][str(table.get_creation_time())]
+                            logger.info(f"Table '{table.get_title()}' (id: {table.get_creation_time()}) a été supprimée sur demande de son MJ.")
+                            await channel.send("La partie a été supprimée!")
+            
+            # La phase 2 est la dernière phase
+            return
+
+
+        #Si on est pas à la dernière phase:
+        
+        #On remet dans buffer les données nécéssaires pour guetter le prochain message
+        self.buffer[author_id]["task_input"] = input_data
+
+        #On attend le prochain input
+        self.buffer[author_id]["task"] = asyncio.create_task(
+            wait_for_seconds(
+                300,
+                cancel_handler=callback(self.cancel_table,input_data,phase+1)
+            )
+        )
+
+    async def edit_table(self, input_data, phase=0):
+        # input_data {
+        #     "channel": discord.TextChannel, (0)
+        #     "author": discord.Member, (0)
+        #     "command": int (3)
+        # }
+        channel: discord.TextChannel = input_data["channel"]
+        author: discord.Member = input_data["author"]
+        author_id: str = str(author.id)
+        channel_id: str = str(channel.id)
+
+        new_data: Any = self.buffer[author_id]["task_input"]
+
+        if phase == 0:
+            # Envoyer la liste des tables de l'utilisateur
+            await channel.send(embed=self.generate_table_list_embed(author))
+            # Si l'auteur n'a aucune table, s'arrêter là
+            if len(self.tables[author_id]) == 0:
+                return
+        
+        if phase == 1:
+            try:
+                table_index = int(new_data)
+            except TypeError:
+                await channel.send("Il me faut un nombre! Donnes m'en un.")
+                phase -= 1 #On recommence la phase 1
+            else:
+                if not table_index in range(0,len(self.tables[author_id])+1):
+                    await channel.send("Ce n'est pas un index valide! Donnes m'en un.")
+                    phase -= 1 #On recommence la phase 1
+                else:
+                    #FIXME Renvoyer la liste des tables avec l'embed pour un accès plus simple
+                    # On récupère la table demandée
+                    i = 1
+                    table = None
+                    for k, t in self.tables[author_id].items():
+                        if i == table_index:
+                            table = t
+                            break
+                    # On la stocke pour pouvoir l'utiliser lors des phases suivantes
+                    input_data["table"] = table
+
+                    info_embed = discord.Embed(
+                        title="Que veux tu modifier?",
+                        description="**1•** Modifier le titre\n**2•** Modifier la description\n**3•** Ajouter un MJ\n**0• Annuler l'opération**"
+                    ).set_author(name=f"Modifier {table.get_title()}:", icon_url=author.avatar_url)
+
+                    await channel.send(embed=info_embed)
+        
+        if phase == 2:
+            try:
+                command = int(new_data)
+            except ValueError:
+                await channel.send("Il me faut un nombre!")
+                phase -= 1 #On recommence la phase 2
+            else:
+                table: Table = input_data["table"]
+                input_data["command"] = command
+                if not command in range(0,4):
+                    await channel.send("Ce n'est pas une commande valide! Donnes m'en une.")
+                    phase -= 1 #On recommence la phase 1
+                elif command == 0: # Annuler
+                    await channel.send("Opération annulée!")
+                    return
+                
+                elif command == 1: # Modifier le titre
+                    info_embed = discord.Embed(
+                        title="Modifier le titre:",
+                        description="Envoies le nouveau titre en message"
+                    ).set_author(name=f"Modifier {table.get_title()}", icon_url=author.avatar_url)
+                    await channel.send(embed=info_embed)
+                
+                elif command == 2:
+                    info_embed = discord.Embed(
+                        title="Modifier la description:",
+                        description="Envoies la nouvelle description en message"
+                    ).set_author(name=f"Modifier {table.get_title()}", icon_url=author.avatar_url)
+                    await channel.send(embed=info_embed)
+                
+                elif command == 3:
+                    #TODO Implémenter ce système
+                    await channel.send("Les Co-MJs ne sont pas implémentés :(")
+                    return
+        
+        if phase == 3:
+            command = input_data["command"]
+            if command == 1:
+                new_title = str(new_data)
+                table.set(title=new_title)
+                #TODO Renommer la catégorie
+            
+            if command == 2:
+                new_description = str(new_data)
+                table.set(description=new_description)
+
+            message = table.get_annoucement_message()
+            if not message is None:
+                try:
+                    await message.edit(embed=self.generate_table_announcement_embed(table))
+                except discord.NotFound:
+                    logger.error("edit_message (phase 3): le message d'annonce n'existe pas!")
+                except discord.Forbidden:
+                    logger.error("edit_message (phase 3): Permissions manquantes pour accéder au message d'annonce!")
+                    await channel.send("Je n'ai pas la permission de modifier le message d'annonce! Contactez un administrateur pour régler le problème!")
+                else:
+                    logger.debug(f"Message d'annonce pour la partie '{table.get_title()}' modifié")
+                
+
+            # Enregistrer les modifications
+            self.tables[author_id][str(table.get_creation_time)] = table
+            self.write_table_to_file(table)
+
+                
+        #Si on est pas à la dernière phase:
+        
+        #On remet dans buffer les données nécéssaires pour guetter le prochain message
+        self.buffer[author_id]["task_input"] = input_data
+
+        #On attend le prochain input
+        self.buffer[author_id]["task"] = asyncio.create_task(
+            wait_for_seconds(
+                300,
+                cancel_handler=callback(self.edit_table,input_data,phase+1)
+            )
+        )
+
+
 
     async def announce_table(self, table: Table, channel=None) -> discord.Message:
         # Si non précisé, le canal est celui par défaut
@@ -437,6 +750,23 @@ class JDRCog(commands.Cog):
             description=table.get_description()+"\n\n✅ pour participer"
         ).set_author(name=author.display_name+" propose:", icon_url=author.avatar_url)
 
+    def generate_table_list_embed(self, author: discord.Member):
+        author_id = str(author.id)
+        if (not author_id in self.tables) or ( len(self.tables[author_id]) == 0 ):
+            description = "Tu n'as actuellement aucune table.\nTu peux créer une table avec `=creer_table`"
+        else:
+            description = ""
+            i = 1
+            for key, table in self.tables[author_id].items():
+                description += f"**{i}•** *{table.get_title()}*\n"
+                i += 1
+            description += "**0. Annuler**"
+        
+        return discord.Embed(
+            title=f"Choisis une table en tapant son numéro:",
+            description=description
+        ).set_author(name=f"Tables de {author.display_name}:", icon_url=author.avatar_url)   
+
     def write_table_to_file(self, table: Table) -> None:
         table_data = table.to_dict()
         self.resource_manager.write(
@@ -480,6 +810,7 @@ class JDRCog(commands.Cog):
                 table.get_player_role(),
                 reason='A réagi pour être joueur de la table'
             )
+            logger.debug(f"{member} devient joueur de {table.get_title()}")
         
         async def rmcb(mid, emoji, member):
             if member.bot:
@@ -489,6 +820,7 @@ class JDRCog(commands.Cog):
                 table.get_player_role(),
                 reason='A enlevé sa réaction pour être joueur'
             )
+            logger.debug(f"{member} n'est plus joueur de {table.get_title()}")
         
         self.reaction_listener.add_callbacks(
             message.channel.id,

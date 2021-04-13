@@ -33,16 +33,13 @@ class ResourcesManager:
 
         
     def read(self, path):
+        path = self.path + "/" + os.path.normpath(path)
+
         if os.path.isdir(path):
             raise IsADirectoryError(f"Cannot write to {path} for it is a directory!")
-        
-        path = self.path + "/" + os.path.normpath(path)
 
         if ".." in path or path[0] == "/":
             raise ValueError("Only relative paths to childs are allowed!")
-        
-        if os.path.isdir(path):
-            raise ValueError(f"{path} is a directory")
 
         if not os.path.isfile(path):
             raise FileNotFoundError(f"{path} does not exist!")
@@ -58,3 +55,31 @@ class ResourcesManager:
         
         return data
 
+    def delete(self, path):
+        path = self.path + '/' + path
+        
+        if os.path.isdir(path):
+            raise IsADirectoryError(f"Cannot delete to {path} for it is a directory!\nTo delete a directory, use ResourcesManager.delete_dir(path)")
+
+        if ".." in path or path[0] == "/":
+            raise ValueError("Only relative paths to childs are allowed!")
+
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"{path} does not exist!")
+        
+        os.remove(path)
+    
+    def delete_dir(self, path):
+        
+        if os.path.isfile(path):
+            raise ValueError(f"Cannot delete to {path} for it is a file!\nTo delete a file, use ResourcesManager.delete(path)")
+
+        if ".." in path or path[0] == "/":
+            raise ValueError("Only relative paths to childs are allowed!")
+
+        path = self.path + '/' + path
+
+        if not os.path.isdir(path):
+            raise FileNotFoundError(f"{path} does not exist!")
+        
+        os.rmdir(path)

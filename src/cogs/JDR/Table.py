@@ -69,10 +69,10 @@ class Table:
         self._announcement_msg = message
         self._announced = int(time.time())
     
-    def get_annoucement_message(self):
-        """Returns the announcement message or False if the Table hasn't been announced yet"""
+    def get_annoucement_message(self) -> discord.Message:
+        """Returns the announcement message or None if the Table hasn't been announced yet"""
         if not self.is_announced():
-            return False
+            return None
         else:
             return self._announcement_msg
         
@@ -99,6 +99,7 @@ class Table:
                 author:             `discord.Member`
                 title:              `str`
                 description:        `str`
+                announced           `int/False`
                 announcement_msg:   `discord.Message`
         """
         for key, value in kwargs.items():
@@ -110,8 +111,10 @@ class Table:
                 self.set_description(value)
             elif key == "announcement_msg":
                 self.set_announcement_message(value)
+            elif key == "announced":
+                self._announced = value
             else:
-                raise KeyError(f"The attribute ${key} does not exist or cannot be set")
+                raise KeyError(f"The attribute {key} does not exist or cannot be set")
 
     def to_dict(self) -> dict:
         """Returns the dict equivalent of the table"""

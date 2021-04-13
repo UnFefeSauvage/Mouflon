@@ -5,14 +5,14 @@ import json
 import discord
 from discord.ext import commands
 
-import resources
-import cogs
+from .resources import ResourcesManager
+from .cogs import JDRCog
 
 #* * # * # * # * # * # * # * # * # * *#
 #* MISE EN PLACE DU RESOURCE_MANAGER *#
 #* * # * # * # * # * # * # * # * # * *#
 
-resource_manager = resources.ResourcesManager("resources")
+resource_manager = ResourcesManager("resources")
 config = json.loads(resource_manager.read("config.json"))
 
 
@@ -47,7 +47,7 @@ async def on_ready():
     logger.info("Le bot est connecté et prêt à l'utilisation!")
 
 def launch():
-    bot.add_cog(cogs.JDRCog(bot,resource_manager))
+    bot.add_cog(JDRCog(bot,resource_manager))
     bot.run(config["token"])
 
 if __name__ == "__main__":
